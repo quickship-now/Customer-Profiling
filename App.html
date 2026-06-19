@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QuickShip Customer Profile</title>
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="QuickShip navigation">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">QS</div>
+          <div>
+            <p class="eyebrow">QuickShip</p>
+            <h1>Customer Profile</h1>
+          </div>
+        </div>
+        <nav class="nav-tabs" aria-label="Pages">
+          <button class="nav-tab active" type="button" data-page="entry">Data Entry</button>
+          <button class="nav-tab" type="button" data-page="lookup">Lookup</button>
+        </nav>
+        <div class="sidebar-note">
+          <strong>Google Sheet live</strong>
+          <span>Data is stored and fetched through this Apps Script web app.</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <section class="topbar">
+          <div>
+            <p class="eyebrow">Premium Customer Profiling</p>
+            <h2 id="pageTitle">Data Entry</h2>
+          </div>
+          <div class="status-pill" id="connectionStatus">Loading</div>
+        </section>
+
+        <section class="page active" id="entryPage" aria-labelledby="entryTitle">
+          <div class="page-heading">
+            <div>
+              <h3 id="entryTitle">Create customer profile</h3>
+              <p>Capture the full QuickShip commercial and operations profile.</p>
+            </div>
+            <button class="secondary-button" type="button" id="clearFormButton">Clear</button>
+          </div>
+          <form id="profileForm" class="profile-form"></form>
+          <div class="form-actions">
+            <button class="primary-button" type="submit" form="profileForm">Save to Google Sheet</button>
+            <p class="form-message" id="formMessage" role="status"></p>
+          </div>
+        </section>
+
+        <section class="page" id="lookupPage" aria-labelledby="lookupTitle">
+          <div class="page-heading">
+            <div>
+              <h3 id="lookupTitle">Lookup customer detail</h3>
+              <p>Search saved profiles using QS Code and Company Name.</p>
+            </div>
+          </div>
+          <form id="lookupForm" class="lookup-panel">
+            <label>
+              <span>QS Code</span>
+              <input name="qsCode" autocomplete="off" placeholder="QS-0001">
+            </label>
+            <label>
+              <span>Company Name</span>
+              <input name="companyName" autocomplete="organization" placeholder="Company name">
+            </label>
+            <button class="primary-button" type="submit">Fetch Details</button>
+          </form>
+          <p class="form-message" id="lookupMessage" role="status"></p>
+          <div class="lookup-results" id="lookupResults"></div>
+        </section>
+      </main>
+    </div>
+
+    <?!= include('JavaScript'); ?>
+  </body>
+</html>

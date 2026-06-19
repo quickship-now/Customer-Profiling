@@ -1,0 +1,224 @@
+<script>
+  let schema = null;
+
+  const pages = {
+    entry: document.getElementById('entryPage'),
+    lookup: document.getElementById('lookupPage')
+  };
+
+  const pageTitle = document.getElementById('pageTitle');
+  const profileForm = document.getElementById('profileForm');
+  const formMessage = document.getElementById('formMessage');
+  const lookupForm = document.getElementById('lookupForm');
+  const lookupMessage = document.getElementById('lookupMessage');
+  const lookupResults = document.getElementById('lookupResults');
+  const connectionStatus = document.getElementById('connectionStatus');
+
+  function runServer(functionName, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[functionName](...args);
+    });
+  }
+
+  function groupedColumns() {
+    const groups = new Map();
+    schema.columns.forEach(column => {
+      if (column.system) return;
+      const section = column.section || 'System';
+      if (!groups.has(section)) groups.set(section, []);
+      groups.get(section).push(column);
+    });
+    return Array.from(groups.entries());
+  }
+
+  function setMessage(element, text, type = '') {
+    element.textContent = text;
+    element.className = `form-message ${type}`.trim();
+  }
+
+  function createField(column) {
+    const label = document.createElement('label');
+    label.className = ['textarea', 'url'].includes(column.type) ? 'field wide' : 'field';
+
+    const title = document.createElement('span');
+    title.textContent = `${column.label}${column.required ? ' *' : ''}`;
+    label.append(title);
+
+    let input;
+    if (column.type === 'textarea') {
+      input = document.createElement('textarea');
+    } else if (column.type === 'select') {
+      input = document.createElement('select');
+      (column.options || ['']).forEach(option => {
+        const optionElement = document.createElement('option');
+        optionElement.value = option;
+        optionElement.textContent = option || 'Select';
+        input.append(optionElement);
+      });
+    } else {
+      input = document.createElement('input');
+      input.type = column.type || 'text';
+    }
+
+    input.name = column.key;
+    input.required = Boolean(column.required);
+    input.autocomplete = column.key === 'companyName' ? 'organization' : 'off';
+    label.append(input);
+
+    if (column.remark) {
+      const help = document.createElement('small');
+      help.textContent = column.remark;
+      label.append(help);
+    }
+
+    return label;
+  }
+
+  function renderForm() {
+    profileForm.innerHTML = '';
+    groupedColumns().forEach(([sectionName, columns]) => {
+      const section = document.createElement('section');
+      section.className = 'form-section';
+
+      const header = document.createElement('div');
+      header.className = 'form-section-header';
+      const title = document.createElement('h4');
+      title.textContent = sectionName;
+      const count = document.createElement('span');
+      count.className = 'section-count';
+      count.textContent = `${columns.length} fields`;
+      header.append(title, count);
+
+      const grid = document.createElement('div');
+      grid.className = 'fields-grid';
+      columns.forEach(column => grid.append(createField(column)));
+
+      section.append(header, grid);
+      profileForm.append(section);
+    });
+  }
+
+  function showPage(pageName) {
+    Object.entries(pages).forEach(([name, page]) => {
+      page.classList.toggle('active', name === pageName);
+    });
+    document.querySelectorAll('.nav-tab').forEach(button => {
+      button.classList.toggle('active', button.dataset.page === pageName);
+    });
+    pageTitle.textContent = pageName === 'entry' ? 'Data Entry' : 'Lookup';
+  }
+
+  function formToObject(form) {
+    return Object.fromEntries(new FormData(form).entries());
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    setMessage(formMessage, 'Saving profile...');
+    const button = document.querySelector('[form="profileForm"]');
+    button.disabled = true;
+
+    try {
+      const result = await runServer('saveProfile', formToObject(profileForm));
+      if (!result.ok) throw new Error(result.message || 'Unable to save profile.');
+      profileForm.reset();
+      setMessage(formMessage, result.message || 'Profile saved to Google Sheet.', 'success');
+    } catch (error) {
+      setMessage(formMessage, error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function appendText(parent, tag, text, className = '') {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    element.textContent = text;
+    parent.append(element);
+    return element;
+  }
+
+  function renderResults(profiles) {
+    lookupResults.innerHTML = '';
+    profiles.forEach(profile => {
+      const card = document.createElement('article');
+      card.className = 'result-card';
+
+      const summary = document.createElement('div');
+      summary.className = 'result-summary';
+      const summaryText = document.createElement('div');
+      appendText(summaryText, 'h4', profile.companyName || 'Unnamed Company');
+      const dateText = profile.submittedAt ? ` · ${new Date(profile.submittedAt).toLocaleString()}` : '';
+      appendText(summaryText, 'p', `${profile.qsCode || 'No QS Code'}${dateText}`);
+      summary.append(summaryText);
+      card.append(summary);
+
+      groupedColumns().forEach(([sectionName, columns]) => {
+        const section = document.createElement('section');
+        section.className = 'detail-section';
+        appendText(section, 'h5', sectionName);
+
+        const grid = document.createElement('div');
+        grid.className = 'detail-grid';
+        columns.forEach(column => {
+          const item = document.createElement('div');
+          item.className = 'detail-item';
+          appendText(item, 'strong', column.label);
+          appendText(item, 'span', profile[column.key] || '-');
+          grid.append(item);
+        });
+
+        section.append(grid);
+        card.append(section);
+      });
+
+      lookupResults.append(card);
+    });
+  }
+
+  async function lookupProfile(event) {
+    event.preventDefault();
+    setMessage(lookupMessage, 'Fetching details...');
+    lookupResults.innerHTML = '';
+
+    try {
+      const result = await runServer('lookupProfiles', formToObject(lookupForm));
+      if (!result.ok) throw new Error(result.message || 'Unable to fetch details.');
+      if (!result.profiles.length) {
+        setMessage(lookupMessage, 'No profile found for the entered QS Code and Company Name.', 'error');
+        return;
+      }
+      setMessage(lookupMessage, `${result.count} matching profile${result.count === 1 ? '' : 's'} found.`, 'success');
+      renderResults(result.profiles);
+    } catch (error) {
+      setMessage(lookupMessage, error.message, 'error');
+    }
+  }
+
+  async function init() {
+    try {
+      schema = await runServer('getSchema');
+      renderForm();
+      connectionStatus.textContent = 'Sheet ready';
+      connectionStatus.classList.add('ready');
+    } catch (error) {
+      connectionStatus.textContent = 'Setup needed';
+      connectionStatus.classList.add('warning');
+      setMessage(formMessage, error.message, 'error');
+    }
+
+    document.querySelectorAll('.nav-tab').forEach(button => {
+      button.addEventListener('click', () => showPage(button.dataset.page));
+    });
+    profileForm.addEventListener('submit', saveProfile);
+    lookupForm.addEventListener('submit', lookupProfile);
+    document.getElementById('clearFormButton').addEventListener('click', () => {
+      profileForm.reset();
+      setMessage(formMessage, '');
+    });
+  }
+
+  init();
+</script>
